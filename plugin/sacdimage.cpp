@@ -294,7 +294,9 @@ AreaToc parseAreaToc(const QByteArray& data)
             sector += 1;
         }
         else {
-            break;
+            // Padding or a sector type we do not know: skip it and keep scanning, as text and
+            // track lists are not guaranteed to follow the header back to back.
+            sector += 1;
         }
     }
 

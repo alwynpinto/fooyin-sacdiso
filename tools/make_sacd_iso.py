@@ -202,6 +202,7 @@ def build_master_toc(area1_toc, area1_toc2, area1_size, area2_toc, area2_toc2, a
 
 
 DST_MODE = False
+TEXT_GAP = 0
 
 
 def build_area_toc(ident, channels, loudspeaker, area_start, area_end, tracks, size_sectors, titles, performers):
@@ -225,8 +226,8 @@ def build_area_toc(ident, channels, loudspeaker, area_start, area_end, tracks, s
     t[90] = 2
     struct.pack_into(">H", t, 144, 152)
     t[152:152 + 12] = b"Test area ST"[:12]
-    # sector 1: SACDTTxt
-    base = SECTOR
+    # sector 1 (+gap): SACDTTxt
+    base = SECTOR * (1 + TEXT_GAP)
     t[base:base + 8] = b"SACDTTxt"
     pos = 8 + 2 * 255 if False else 8 + 2 * len(tracks) + 8
     for i, (title, perf) in enumerate(zip(titles, performers)):
@@ -237,14 +238,14 @@ def build_area_toc(ident, channels, loudspeaker, area_start, area_end, tracks, s
         blob += bytes([0x02, 0x20]) + perf.encode("latin-1") + b"\x00"
         t[base + pos:base + pos + len(blob)] = blob
         pos += len(blob) + 2
-    # sector 2: SACDTRL1
-    base = SECTOR * 2
+    # sector 2 (+gap): SACDTRL1
+    base = SECTOR * (2 + TEXT_GAP)
     t[base:base + 8] = b"SACDTRL1"
     for i, tr in enumerate(tracks):
         struct.pack_into(">I", t, base + 8 + 4 * i, tr["start_lsn"])
         struct.pack_into(">I", t, base + 8 + 255 * 4 + 4 * i, tr["length_lsn"])
-    # sector 3: SACDTRL2
-    base = SECTOR * 3
+    # sector 3 (+gap): SACDTRL2
+    base = SECTOR * (3 + TEXT_GAP)
     t[base:base + 8] = b"SACDTRL2"
     for i, tr in enumerate(tracks):
         t[base + 8 + 4 * i:base + 8 + 4 * i + 4] = tc_with_flags(tr["start_frame"])
@@ -257,20 +258,22 @@ def main():
     ap.add_argument("out")
     ap.add_argument("--no-multi", action="store_true")
     ap.add_argument("--dst-raw", action="store_true", help="DST sector layout with uncompressed (DstCoded=0) frames")
+    ap.add_argument("--text-gap", action="store_true", help="put an unused (zero) sector before the text sector in each area TOC")
     ap.add_argument("--seconds-per-track", type=float, default=0.6)
     args = ap.parse_args()
-    global DST_MODE
+    global DST_MODE, TEXT_GAP
     DST_MODE = args.dst_raw
+    TEXT_GAP = 1 if args.text_gap else 0
 
     per_track = max(4, int(round(args.seconds_per_track * FRAME_RATE)))
     pregap = 2
 
     AREA1_TOC1 = 540
     AREA1_TOC2 = 560
-    AREA1_SIZE = 4
+    AREA1_SIZE = 4 + TEXT_GAP
     AREA2_TOC1 = 580
     AREA2_TOC2 = 600
-    AREA2_SIZE = 4
+    AREA2_SIZE = 4 + TEXT_GAP
     AREA1_START = 700
 
     print("generating stereo audio...", file=sys.stderr)
