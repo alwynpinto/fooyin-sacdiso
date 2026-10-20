@@ -13,12 +13,22 @@ command -v flatpak >/dev/null || { echo "flatpak not found"; exit 1; }
 flatpak info "$APP" >/dev/null 2>&1 || { echo "$APP is not installed"; exit 1; }
 
 VERSION="$(flatpak info "$APP" | awk '/Version:/ {print $2; exit}')"
-RUNTIME="$(flatpak info -r "$APP")"          # e.g. org.kde.Platform/x86_64/6.11
+# The runtime the app runs on, e.g. org.kde.Platform/x86_64/6.9. (`flatpak info -r`
+# prints the app's own ref, app/org.fooyin.fooyin/x86_64/stable, which is not it.)
+RUNTIME="$(flatpak info --show-runtime "$APP")"
+ARCH="$(echo "$RUNTIME" | cut -d/ -f2)"
 BRANCH="${RUNTIME##*/}"
-SDK="org.kde.Sdk//$BRANCH"
-echo "fooyin $VERSION, runtime $RUNTIME -> $SDK"
+SDK="org.kde.Sdk/$ARCH/$BRANCH"
+# Install the SDK where fooyin itself is installed (system or user), so flatpak
+# does not stop to ask when both installations have a flathub remote.
+WHERE="$(flatpak list --app --columns=application,installation | awk -v a="$APP" '$1 == a {print $2; exit}')"
+case "$WHERE" in system) WHERE=--system ;; *) WHERE=--user ;; esac
+echo "fooyin $VERSION, runtime $RUNTIME -> $SDK ($WHERE)"
 
-flatpak install -y --noninteractive --or-update flathub "$SDK" || true
+if ! flatpak info "$SDK" >/dev/null 2>&1; then
+  flatpak install "$WHERE" -y --noninteractive flathub "$SDK" \
+    || { echo "Could not install $SDK from flathub"; exit 1; }
+fi
 
 mkdir -p "$WORK"
 cd "$WORK"
